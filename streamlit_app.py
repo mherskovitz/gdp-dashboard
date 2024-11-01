@@ -13,38 +13,18 @@ st.set_page_config(
 # Declare some useful functions.
 
 @st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def get_data():
+    """Grab GDP and population data from CSV files."""
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
-
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
     DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
+    POP_DATA_FILENAME = Path(__file__).parent/'data/population_data.csv'
     raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    raw_pop_df = pd.read_csv(POP_DATA_FILENAME)
 
     MIN_YEAR = 1960
     MAX_YEAR = 2022
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
+    # Pivot GDP data
     gdp_df = raw_gdp_df.melt(
         ['Country Code'],
         [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
@@ -52,21 +32,35 @@ def get_gdp_data():
         'GDP',
     )
 
+    # Pivot population data
+    pop_df = raw_pop_df.melt(
+        ['Country Code'],
+        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
+        'Year',
+        'Population',
+    )
+
+    # Merge GDP and population data
+    df = pd.merge(gdp_df, pop_df, on=['Country Code', 'Year'])
+
+    # Calculate GDP per capita
+    df['GDP per capita'] = df['GDP'] / df['Population']
+
     # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    df['Year'] = pd.to_numeric(df['Year'])
 
-    return gdp_df
+    return df
 
-gdp_df = get_gdp_data()
+df = get_data()
 
 # -----------------------------------------------------------------------------
 # Draw the actual page
 
 # Set the title that appears at the top of the page.
 '''
-# :earth_americas: GDP dashboard
+# :earth_americas: GDP per capita dashboard
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
+Browse GDP per capita data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
 notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
 But it's otherwise a great (and did I mention _free_?) source of data.
 '''
@@ -75,8 +69,8 @@ But it's otherwise a great (and did I mention _free_?) source of data.
 ''
 ''
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+min_value = df['Year'].min()
+max_value = df['Year'].max()
 
 from_year, to_year = st.slider(
     'Which years are you interested in?',
@@ -84,7 +78,7 @@ from_year, to_year = st.slider(
     max_value=max_value,
     value=[min_value, max_value])
 
-countries = gdp_df['Country Code'].unique()
+countries = df['Country Code'].unique()
 
 if not len(countries):
     st.warning("Select at least one country")
@@ -99,31 +93,30 @@ selected_countries = st.multiselect(
 ''
 
 # Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
+filtered_df = df[
+    (df['Country Code'].isin(selected_countries))
+    & (df['Year'] <= to_year)
+    & (from_year <= df['Year'])
 ]
 
-st.header('GDP over time', divider='gray')
+st.header('GDP per capita over time', divider='gray')
 
 ''
 
 st.line_chart(
-    filtered_gdp_df,
+    filtered_df,
     x='Year',
-    y='GDP',
+    y='GDP per capita',
     color='Country Code',
 )
 
 ''
 ''
 
+first_year = df[df['Year'] == from_year]
+last_year = df[df['Year'] == to_year]
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
+st.header(f'GDP per capita in {to_year}', divider='gray')
 
 ''
 
@@ -133,19 +126,22 @@ for i, country in enumerate(selected_countries):
     col = cols[i % len(cols)]
 
     with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
+        first_gdp_pc = first_year[first_year['Country Code'] == country]['GDP per capita'].iat[0]
+        last_gdp_pc = last_year[last_year['Country Code'] == country]['GDP per capita'].iat[0]
 
-        if math.isnan(first_gdp):
+        if math.isnan(first_gdp_pc):
             growth = 'n/a'
             delta_color = 'off'
         else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
+            growth = f'{last_gdp_pc / first_gdp_pc:,.2f}x'
             delta_color = 'normal'
 
         st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
+            label=f'{country} GDP per capita',
+            value=f'{last_gdp_pc:,.0f}',
             delta=growth,
             delta_color=delta_color
         )
+```
+
+In this code, `get_data` retrieves both GDP and population data, merges them, and calculates GDP per capita. The plotting logic is updated to display GDP per capita.

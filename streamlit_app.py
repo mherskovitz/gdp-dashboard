@@ -142,6 +142,6 @@ for i, country in enumerate(selected_countries):
             delta=growth,
             delta_color=delta_color
         )
-```
 
-In this code, `get_data` retrieves both GDP and population data, merges them, and calculates GDP per capita. The plotting logic is updated to display GDP per capita.
+
+#In this code, `get_data` retrieves both GDP and population data, merges them, and calculates GDP per capita. The plotting logic is updated to display GDP per capita.
